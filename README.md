@@ -1,6 +1,9 @@
 # OpenVPN Assitant
 
 My project for passing exams (maybe will improve in future)
+
+Currently in pre-release
+
 Tested on Debian 8/9
 
 ## Getting Started
@@ -29,6 +32,7 @@ Just run main.py and folow screen instructions
 
 ### Known issues
 
-* Using **no logging** option while installing will not allow to start OpenVPN (can be activated later by hand)
+* Using *no logging* option while installing will not allow to start OpenVPN (can be activated later by hand)
 * Checking crl.pem for revoked profiles not included(since i have no time to fix it)
 * Using server IP option (to hide your real one) not included (same as prev xd)
+* *iptables* rules need some fixes
