@@ -2,7 +2,7 @@
 
 My project for passing exams (maybe will improve in future)
 
-Currently in pre-release
+Currently in dev
 
 Tested on Debian 8/9
 
