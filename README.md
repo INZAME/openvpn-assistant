@@ -14,7 +14,6 @@ Python version 3.6 or higher and some libs
 ```
 paramiko
 pyqt5
-
 ```
 
 ### How to
@@ -30,6 +29,6 @@ Just run main.py and folow screen instructions
 
 ### Known issues
 
-* Using no logging option while installing will not allow to start OpenVPN (can be activated later by hand)
+* Using **no logging** option while installing will not allow to start OpenVPN (can be activated later by hand)
 * Checking crl.pem for revoked profiles not included(since i have no time to fix it)
 * Using server IP option (to hide your real one) not included (same as prev xd)
