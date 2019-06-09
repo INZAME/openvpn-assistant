@@ -35,7 +35,7 @@ class LoginWindow(QtWidgets.QMainWindow, login_design.Ui_ConnectWindow):
             pass
         self.btnConnect.clicked.connect(self.connection)
         #self.ssh_connection = None
-        #self.sftp_connection = None
+        #self.sftp_connection = None        
     
     def rm_temp(self):
         os.remove('./server.conf')
@@ -158,7 +158,7 @@ class EditDialog(QtWidgets.QDialog, edit_design.Ui_Edit_Dialog):
         self.stream.exec_command('iptables-save > /etc/iptables/rules.v4')
         self.stream.exec_command('echo "iptables-restore < /etc/iptables.conf" >> /etc/rc.local')
         self.sftp_stream.put('./server.conf', '/etc/openvpn/server.conf')
-        os.remove('/server.conf')
+        os.remove('./server.conf')
         QtWidgets.QMessageBox.information(self, 'Succeed', 'Successfully copied configs!')
 
 

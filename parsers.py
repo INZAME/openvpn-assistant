@@ -63,7 +63,9 @@ def download_profiles(ssh, sftp, user_list, subfolder=True):  # Func for downloa
                     '',
                     '# Windows route method',
                     'route-method exe', '', 'remote-cert-tls server', 'dev tun', f'proto {proto}',
-                    'resolv-retry infinite', 'persist-key', 'persist-tun', 'explicit-exit-notify']
+                    'resolv-retry infinite', 'persist-key', 'persist-tun']
+        if settings[20] == 'proto udp':
+            settings.append('explicit-exit-notify')
         if new_user not in usr_reg:
             ssh.exec_command('cd /etc/openvpn/easy-rsa; source ./vars; ./build-key --batch {}'.format(new_user))
             time.sleep(1)
