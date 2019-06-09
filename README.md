@@ -27,7 +27,7 @@ Just run main.py and folow screen instructions
 1. Connect to your VDS or virtual machine
 2. Complete installation process
 3. Manage your ovpn profiles
-4. Edit your existing server configuration (soon)
+4. Edit your existing server configuration
 ```
 
 ### Known issues
