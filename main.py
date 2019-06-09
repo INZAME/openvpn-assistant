@@ -29,9 +29,17 @@ class LoginWindow(QtWidgets.QMainWindow, login_design.Ui_ConnectWindow):
                     self.port.setText(line.split('=')[1].rstrip('\n'))
         except Exception:
             pass
+        try:
+            rm_temp()
+        except Exception:
+            pass
         self.btnConnect.clicked.connect(self.connection)
         #self.ssh_connection = None
         #self.sftp_connection = None
+    
+    def rm_temp(self):
+        os.remove('./server.conf')
+        os.remove('./vars')
 
     def center(self):
         qr = self.frameGeometry()
@@ -71,14 +79,15 @@ class LoginWindow(QtWidgets.QMainWindow, login_design.Ui_ConnectWindow):
                 except Exception as e:
                     first = QtWidgets.QMessageBox.question(self, 'First time?', 'Looks like there is no OpenVPN configured.\nStart installation manager?', QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.Yes)
                     if first == QtWidgets.QMessageBox.Yes:
+                        self.ssh_connection.exec_command('apt install -y net-tools openvpn')
                         while not install:
                             try:
-                                self.ssh_connection.exec_command('apt install -y net-tools openvpn')
-                                sleep(16)
                                 self.sftp_connection.stat('/etc/openvpn')
                                 install = True
                             except Exception:
                                 pass
+                            else:
+                                print('DEBUG: net-tools and openvpn installed!')
                         self.setup = SetupDialog(ssh=self.ssh_connection, sftp=self.sftp_connection)
                         self.setup.show()
                         self.close()
@@ -174,19 +183,21 @@ class SetupDialog(QtWidgets.QDialog, setup_design.Ui_Setup_Dialog):
     def servconf(self):
         created = False
         certs = False
+        ready = False
         self.finishButton.setEnabled(False)
         try:
             os.remove('./vars')
         except Exception as e:
             pass
+        self.stream.exec_command('mkdir /etc/openvpn/easy-rsa/; cp -r /usr/share/easy-rsa/* /etc/openvpn/easy-rsa/; ln -s /etc/openvpn/easy-rsa/openssl-1.0.0.cnf /etc/openvpn/easy-rsa/openssl.cnf')
         while not created:
             try:
-                self.stream.exec_command('mkdir /etc/openvpn/easy-rsa/; cp -r /usr/share/easy-rsa/* /etc/openvpn/easy-rsa/; ln -s /etc/openvpn/easy-rsa/openssl-1.0.0.cnf /etc/openvpn/easy-rsa/openssl.cnf')
-                sleep(2)
                 self.sftp_stream.get('/etc/openvpn/easy-rsa/vars', './vars')
                 created = True
             except FileNotFoundError:
                 pass
+            else:
+                print('DEBUG: vars copied to local desktop')
         config = []
         config.append(f'local {self.ipEdit.text()}')
         config.append(f'port {self.portEdit.text()}')
@@ -236,9 +247,26 @@ class SetupDialog(QtWidgets.QDialog, setup_design.Ui_Setup_Dialog):
         os.remove('./vars')
         os.rename(fout.name, 'vars')
         self.sftp_stream.put('./vars', '/etc/openvpn/easy-rsa/vars')
-        sleep(2)
-        self.stream.exec_command('cd /etc/openvpn/easy-rsa/; source ./vars; ./clean-all; ./build-ca --batch; ./build-key-server --batch server; ./build-dh --batch; cp ./keys/server.crt /etc/openvpn/; cp ./keys/server.key /etc/openvpn/; cp ./keys/ca.crt /etc/openvpn/; cp ./keys/dh2048.pem /etc/openvpn/;')
-        sleep(12)
+        self.stream.exec_command('cd /etc/openvpn/easy-rsa/; source ./vars; ./clean-all; ./build-ca --batch; ./build-dh --batch; ./build-key-server --batch server;')
+        generated = False
+        while not generated:
+            try:
+                self.sftp_stream.stat('/etc/openvpn/easy-rsa/keys/server.key')
+                generated = True
+            except Exception:
+                pass
+            else:
+                print('DEBUG: Certs generated!')
+                sleep(1)
+                self.stream.exec_command('cp /etc/openvpn/easy-rsa/keys/server.crt /etc/openvpn/server.crt; cp /etc/openvpn/easy-rsa/keys/server.key /etc/openvpn/server.key; cp /etc/openvpn/easy-rsa/keys/ca.crt /etc/openvpn/ca.crt; cp /etc/openvpn/easy-rsa/keys/dh2048.pem /etc/openvpn/dh2048.pem')
+        while not ready:
+            try:
+                self.sftp_stream.stat('/etc/openvpn/dh2048.pem')
+                ready = True
+            except Exception:
+                pass
+            else:
+                print('DEBUG: Certs successfully copied to ovpn dir!')
         self.stream.exec_command('iptables -A FORWARD -i tun0 -j ACCEPT')
         self.stream.exec_command(f'iptables -A FORWARD -i tun0 -o {self.get_ip[1]} -m state --state RELATED,ESTABLISHED -j ACCEPT')
         self.stream.exec_command(f'iptables -A FORWARD -i {self.get_ip[1]} -o tun0 -m state --state RELATED,ESTABLISHED -j ACCEPT')
@@ -255,6 +283,7 @@ class SetupDialog(QtWidgets.QDialog, setup_design.Ui_Setup_Dialog):
             pass
         sleep(2)
         QtWidgets.QMessageBox.information(self, 'Succeed', 'Successfully installed! Server gonna be restarted!')
+        self.stream.exec_command('service openvpn restart')
         self.stream.exec_command('reboot')
         #self.mainwin = MainWindow(ssh=self.stream)
         #self.mainwin.show()
