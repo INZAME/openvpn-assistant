@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file '.\main.ui'
+# Form implementation generated from reading ui file 'main.ui'
 #
 # Created by: PyQt5 UI code generator 5.11.3
 #
@@ -70,6 +70,9 @@ class Ui_MainWindow(object):
         self.usersLabel = QtWidgets.QLabel(self.centralwidget)
         self.usersLabel.setGeometry(QtCore.QRect(150, 350, 61, 21))
         self.usersLabel.setObjectName("usersLabel")
+        self.importButton_2 = QtWidgets.QPushButton(self.centralwidget)
+        self.importButton_2.setGeometry(QtCore.QRect(440, 280, 121, 31))
+        self.importButton_2.setObjectName("importButton_2")
         MainWindow.setCentralWidget(self.centralwidget)
 
         self.retranslateUi(MainWindow)
@@ -97,4 +100,5 @@ class Ui_MainWindow(object):
         self.verLabel.setText(_translate("MainWindow", "error"))
         self.tunText_4.setText(_translate("MainWindow", "Total users on server:"))
         self.usersLabel.setText(_translate("MainWindow", "error"))
+        self.importButton_2.setText(_translate("MainWindow", "Edit server config"))
 

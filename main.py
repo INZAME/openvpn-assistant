@@ -1,5 +1,5 @@
 import sys
-import login_design, main_design, setup_design
+import login_design, main_design, setup_design, edit_design
 import login_func
 import os
 import paramiko
@@ -90,6 +90,69 @@ class LoginWindow(QtWidgets.QMainWindow, login_design.Ui_ConnectWindow):
             pass
 
 
+class EditDialog(QtWidgets.QDialog, edit_design.Ui_Edit_Dialog):
+    def __init__(self, ssh, sftp, parent=None):
+        super(EditDialog, self).__init__(parent)
+        self.setupUi(self)
+        self.center()
+        self.stream = ssh
+        self.sftp_stream = sftp
+        self.get_ip = parsers.get_ip(self.stream)
+        self.ipEdit.setText(self.get_ip[0])
+        self.finishButton.clicked.connect(self.editing)
+
+    def center(self):
+        qr = self.frameGeometry()
+        cp = QtWidgets.QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+
+    def editing(self):
+        config = []
+        config.append(f'local {self.ipEdit.text()}')
+        config.append(f'port {self.portEdit.text()}')
+        config.append(f'proto {self.protoBox.currentText()}')
+        config.extend(('dev tun', 'ca ca.crt', 'cert server.crt', 'key server.key',
+                       ';crl-verify /etc/openvpn/easy-rsa/keys/crl.pem', 'dh dh2048.pem'))
+        config.append(f'server {parsers.cidr_to_netmask(self.netipEdit.text())[0]} {parsers.cidr_to_netmask(self.netipEdit.text())[1]}')
+        config.append('ifconfig-pool-persist ipp.txt')
+        config.append('push "redirect-gateway def1"')
+        if str(self.dnsBox.currentText()) == 'OpenNIC':
+            config.append('dhcp-option DNS 91.217.137.37')
+            config.append('dhcp-option DNS 172.104.136.243')
+        elif str(self.dnsBox.currentText()) == 'Google':
+            config.append('dhcp-option DNS 8.8.8.8')
+            config.append('dhcp-option DNS 8.8.4.4')
+        elif str(self.dnsBox.currentText()) == 'Yandex':
+            config.append('dhcp-option DNS 77.88.8.8')
+            config.append('dhcp-option DNS 77.88.8.1')
+        config.extend(('keepalive 10 120', 'tls-server', 'auth SHA512', 'cipher AES-256-CBC',
+                       'user nobody', 'group nogroup', 'persist-key', 'persist-tun'))
+        if self.clientsBox.isChecked():
+            config.append('client-to-client')
+        if self.loggingBox.isChecked():
+            config.extend(('status /dev/null', 'log /dev/null'))
+        else:
+            config.extend(('status openvpn-status.log', 'log openvpn.log', 'verb 3'))
+        conf = io.open('./server.conf', 'w', newline='\n')
+        for line in config:
+            conf.write(line + '\n')
+        conf.close()
+        self.stream.exec_command('iptables -t nat -F; iptables -F')
+        self.stream.exec_command('iptables -A FORWARD -i tun0 -j ACCEPT')
+        self.stream.exec_command(f'iptables -A FORWARD -i tun0 -o {self.get_ip[1]} -m state --state RELATED,ESTABLISHED -j ACCEPT')
+        self.stream.exec_command(f'iptables -A FORWARD -i {self.get_ip[1]} -o tun0 -m state --state RELATED,ESTABLISHED -j ACCEPT')
+        self.stream.exec_command(f'iptables -t nat -A POSTROUTING -s {self.netipEdit.text()} -o {self.get_ip[1]} -j SNAT --to-source {self.get_ip[0]}')
+        self.stream.exec_command('export DEBIAN_FRONTEND=noninteractive; apt-get -yq install iptables-persistent')
+        sleep(2)
+        self.stream.exec_command('iptables-save > /etc/iptables.conf')
+        self.stream.exec_command('iptables-save > /etc/iptables/rules.v4')
+        self.stream.exec_command('echo "iptables-restore < /etc/iptables.conf" >> /etc/rc.local')
+        self.sftp_stream.put('./server.conf', '/etc/openvpn/server.conf')
+        os.remove('/server.conf')
+        QtWidgets.QMessageBox.information(self, 'Succeed', 'Successfully copied configs!')
+
+
 class SetupDialog(QtWidgets.QDialog, setup_design.Ui_Setup_Dialog):
     def __init__(self, ssh, sftp, parent=None):
         super(SetupDialog, self).__init__(parent)
@@ -132,6 +195,7 @@ class SetupDialog(QtWidgets.QDialog, setup_design.Ui_Setup_Dialog):
                        ';crl-verify /etc/openvpn/easy-rsa/keys/crl.pem', 'dh dh2048.pem'))
         config.append(f'server {parsers.cidr_to_netmask(self.netipEdit.text())[0]} {parsers.cidr_to_netmask(self.netipEdit.text())[1]}')
         config.append('ifconfig-pool-persist ipp.txt')
+        config.append('push "redirect-gateway def1"')
         if str(self.dnsBox.currentText()) == 'OpenNIC':
             config.append('dhcp-option DNS 91.217.137.37')
             config.append('dhcp-option DNS 172.104.136.243')
@@ -179,6 +243,8 @@ class SetupDialog(QtWidgets.QDialog, setup_design.Ui_Setup_Dialog):
         self.stream.exec_command(f'iptables -A FORWARD -i tun0 -o {self.get_ip[1]} -m state --state RELATED,ESTABLISHED -j ACCEPT')
         self.stream.exec_command(f'iptables -A FORWARD -i {self.get_ip[1]} -o tun0 -m state --state RELATED,ESTABLISHED -j ACCEPT')
         self.stream.exec_command(f'iptables -t nat -A POSTROUTING -s {self.netipEdit.text()} -o {self.get_ip[1]} -j SNAT --to-source {self.get_ip[0]}')
+        self.stream.exec_command('export DEBIAN_FRONTEND=noninteractive; apt-get -yq install iptables-persistent')
+        sleep(2)
         self.stream.exec_command('iptables-save > /etc/iptables.conf')
         self.stream.exec_command('iptables-save > /etc/iptables/rules.v4')
         self.stream.exec_command('echo "iptables-restore < /etc/iptables.conf" >> /etc/rc.local')
@@ -208,7 +274,7 @@ class MainWindow(QtWidgets.QMainWindow, main_design.Ui_MainWindow):
         self.connLabel.setText(str(self.stream.get_transport().sock.getpeername()[0]))
         self.verLabel.setText(self.ovpn_version())
         self.usersLabel.setText(self.list_users())
-        self.tunLabel
+        self.importButton_2.clicked.connect(self.editconf)
         self.dwnservButton.clicked.connect(self.dwn_selected)
         self.importButton.clicked.connect(self.importFile)
         self.dwnimpButton.clicked.connect(self.dwn_imported)
@@ -227,6 +293,11 @@ class MainWindow(QtWidgets.QMainWindow, main_design.Ui_MainWindow):
             QtWidgets.QMessageBox.information(self, 'Error', f'{exc}!')
         QtWidgets.QMessageBox.information(self, 'Done!', 'Users revoked!')
         self.usersLabel.setText(self.list_users())
+
+    def editconf(self):
+        self.editcnf = EditDialog(ssh=self.stream, sftp=self.sftp)
+        self.editcnf.show()
+
 
     def ovpn_version(self):
         version = ''
