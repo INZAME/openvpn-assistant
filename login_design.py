@@ -73,6 +73,7 @@ class Ui_ConnectWindow(object):
         self.remember = QtWidgets.QCheckBox(self.centralwidget)
         self.remember.setGeometry(QtCore.QRect(80, 100, 161, 23))
         self.remember.setObjectName("remember")
+        self.remember.setChecked(True)
         ConnectWindow.setCentralWidget(self.centralwidget)
 
         self.retranslateUi(ConnectWindow)
