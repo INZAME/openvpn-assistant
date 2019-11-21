@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 import time
 import os
 import socket
@@ -6,8 +8,10 @@ import re
 from shutil import rmtree
 
 
-def add_users(ssh, state='reg'):  # Add users to var
-    stdin, stdout, stderr = ssh.exec_command('cat /etc/openvpn/easy-rsa/keys/index.txt')
+# --- Add users to var ---
+def add_users(ssh, state='reg'):
+    command = 'cat /etc/openvpn/easy-rsa/keys/index.txt'
+    stdin, stdout, stderr = ssh.exec_command(command)
     if str(state) == 'reg':
         usr_reg = []
         for line in stdout:
@@ -24,6 +28,7 @@ def add_users(ssh, state='reg'):  # Add users to var
         return usr_rev
 
 
+# --- Parsing OVPN server config ---
 def show_conf(ssh):
     config = []
     stdin, stdout, stderr = ssh.exec_command('cat /etc/openvpn/server.conf')
@@ -33,17 +38,20 @@ def show_conf(ssh):
     return config
 
 
-def download_profiles(ssh, sftp, user_list, subfolder=True):  # Func for downloading users
+# --- Func for downloading users ---
+def download_profiles(ssh, sftp, user_list, subfolder=True):
     usr_reg = []
     con_ip = str(ssh.get_transport().sock.getpeername()[0])
     sftp.get('/etc/openvpn/server.conf', './tmp.conf')
     server_conf = open('./tmp.conf', 'r')
+    k_f = '/etc/openvpn/easy-rsa/keys/'
+    index = 'cat /etc/openvpn/easy-rsa/keys/index.txt'
     for line in server_conf:
         if re.match(r'port', line):
             port = line.split()[1]
         elif re.match(r'proto', line):
             proto = line.split()[1]
-    stdin, stdout, stderr = ssh.exec_command('cat /etc/openvpn/easy-rsa/keys/index.txt')
+    stdin, stdout, stderr = ssh.exec_command(index)
     for line in stdout:
         new_line = line.split('/')
         if line[0] == 'V':
@@ -62,12 +70,14 @@ def download_profiles(ssh, sftp, user_list, subfolder=True):  # Func for downloa
                     'ca ca.crt', f'cert {new_user}.crt', f'key {new_user}.key',
                     '',
                     '# Windows route method',
-                    'route-method exe', '', 'remote-cert-tls server', 'dev tun', f'proto {proto}',
+                    'route-method exe', '', 'remote-cert-tls server',
+                    'dev tun', f'proto {proto}',
                     'resolv-retry infinite', 'persist-key', 'persist-tun']
         if settings[20] == 'proto udp':
             settings.append('explicit-exit-notify')
         if new_user not in usr_reg:
-            ssh.exec_command('cd /etc/openvpn/easy-rsa; source ./vars; ./build-key --batch {}'.format(new_user))
+            end = f'; source ./vars; ./build-key --batch {new_user}'
+            ssh.exec_command('cd ' + k_f[:-5] + end)
             time.sleep(1)
         if subfolder:
             if os.path.exists(f'./profiles/{new_user}'):
@@ -75,7 +85,7 @@ def download_profiles(ssh, sftp, user_list, subfolder=True):  # Func for downloa
             os.makedirs(f'./profiles/{new_user}')
             files = ('ca.crt', str(new_user + '.crt'), str(new_user + '.key'))
             for name in files:
-                sftp.get(str('/etc/openvpn/easy-rsa/keys/' + name), str(f'./profiles/{new_user}/{name}'))
+                sftp.get(str(k_f + name), str(f'./profiles/{new_user}/{name}'))
                 ovpn = open(f'./profiles/{new_user}/{new_user}.ovpn', 'w')
                 for line in settings:
                     ovpn.write(line + '\n')
@@ -86,7 +96,7 @@ def download_profiles(ssh, sftp, user_list, subfolder=True):  # Func for downloa
             os.mkdir(new_user)
             files = ('ca.crt', str(new_user + '.crt'), str(new_user + '.key'))
             for name in files:
-                sftp.get(str('/etc/openvpn/easy-rsa/keys/' + name), str(f'./{new_user}/{name}'))
+                sftp.get(str(k_f + name), str(f'./{new_user}/{name}'))
                 ovpn = open(f'./{new_user}/{new_user}.ovpn', 'w')
                 for line in settings:
                     ovpn.write(line + '\n')
@@ -94,18 +104,23 @@ def download_profiles(ssh, sftp, user_list, subfolder=True):  # Func for downloa
     server_conf.close()
     os.remove('./tmp.conf')
 
+
+# --- Converting ip/mask to tuple ---
 def cidr_to_netmask(cidr):
     network, net_bits = cidr.split('/')
     host_bits = 32 - int(net_bits)
     netmask = socket.inet_ntoa(struct.pack('!I', (1 << 32) - (1 << host_bits)))
     return network, netmask
 
+
+# --- Get tunnel IP ---
 def get_tun0(ssh):
-    ifaces = ('tun0', 'tun1', 'tun2')
     ip = []
+    ifaces = ('tun0', 'tun1', 'tun2')
+    end = " | grep 'inet' | cut -d: -f2 | awk '{print $2}'"
     for this in ifaces:
         stdin, stdout, stderr = ssh.exec_command(
-            str("ifconfig " + this + " | grep 'inet' | cut -d: -f2 | awk '{print $2}'"))
+            str("ifconfig " + this + end))
         for line in stdout:
             edited = line.strip()
             if edited != '':
@@ -113,11 +128,15 @@ def get_tun0(ssh):
                 ip.append(this)
     return ip
 
+
+# --- Get remote VM's local IP ---
 def get_ip(ssh):
-    ifaces = ('eth0', 'eth1', 'ens3', 'en3s0', 'ens33', 'en0s3', 'enp0s3', 'enp3s0')
     ip = []
+    ifaces = ('eth0', 'eth1', 'ens3', 'en3s0',
+              'ens33', 'en0s3', 'enp0s3', 'enp3s0')
+    end = " | grep 'inet' | cut -d: -f2 | awk '{print $2}'"
     for this in ifaces:
-        stdin, stdout, stderr = ssh.exec_command(str("ifconfig " + this + " | grep 'inet' | cut -d: -f2 | awk '{print $2}'"))
+        stdin, stdout, stderr = ssh.exec_command(str("ifconfig " + this + end))
         for line in stdout:
             edited = line.strip()
             if edited != '':
