@@ -13,7 +13,7 @@ import os
 import sys
 from tempfile import NamedTemporaryFile
 from PyQt5 import QtWidgets
-from PyQt5.QtWidgets.QMessageBox.Yes as QtYes
+import PyQt5.QtWidgets.QMessageBox.Yes as QtYes
 from time import sleep
 import io
 
