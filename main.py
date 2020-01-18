@@ -13,7 +13,6 @@ import os
 import sys
 from tempfile import NamedTemporaryFile
 from PyQt5 import QtWidgets
-import PyQt5.QtWidgets.QMessageBox.Yes as QtYes
 from time import sleep
 import io
 
@@ -44,7 +43,7 @@ class LoginWindow(QtWidgets.QMainWindow, design.Ui_ConnectWindow):
     def connection(self):
         install = False
         message = dialogs.connect(self)
-        if message == QtYes:
+        if message == Message.Yes :
             ip_u = str(self.ip.text())
             login_u = self.login.text()
             port_u = int(self.port.text())
@@ -67,7 +66,7 @@ class LoginWindow(QtWidgets.QMainWindow, design.Ui_ConnectWindow):
                     self.ovpn.sftp_client.stat('/etc/openvpn/server.conf')
                 except Exception:
                     first = dialogs.no_openvpn(self)
-                    if first == QtYes:
+                    if first == QtWidgets.QMessageBox.Yes:
                         self.ovpn.ssh_client.exec_command(
                             'apt install -y net-tools openvpn')
                         while not install:
@@ -409,7 +408,7 @@ class MainWindow(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
     def closeEvent(self, event):
         reply = dialogs.close_me(self)
-        if reply == QtYes:
+        if reply == QtWidgets.QMessageBox.Yes:
             event.accept()
             self.ovpn.close()
         else:
