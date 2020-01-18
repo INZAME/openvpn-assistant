@@ -1,13 +1,19 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sys
-import design
-import login_func
+import core.design.ovpn_design as design
+import core.design.dialogs as dialogs
+from core.interact.openvpn import OpenVPN
+from core.utils.config_utils import *
+from core.utils.ip_utils import *
+
+# import login_func
+# import parsers
 import os
-import parsers
+import sys
 from tempfile import NamedTemporaryFile
 from PyQt5 import QtWidgets
+from PyQt5.QtWidgets.QMessageBox.Yes as QtYes
 from time import sleep
 import io
 
@@ -18,13 +24,13 @@ class LoginWindow(QtWidgets.QMainWindow, design.Ui_ConnectWindow):
         self.setupUi(self)
         self.center()
         try:
-            login_func.read_config(self, 'login.ini')
+            read_config(self, 'login.ini')
         except Exception:
             pass
         else:
             print('[DEBUG] User config imported!')
         try:
-            login_func.rm_temp()
+            rm_temp()
         except Exception:
             pass
         self.btnConnect.clicked.connect(self.connection)
@@ -37,24 +43,18 @@ class LoginWindow(QtWidgets.QMainWindow, design.Ui_ConnectWindow):
 
     def connection(self):
         install = False
-        message = QtWidgets.QMessageBox.question(
-            self, 'Continue?', "Do u want to connect?",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-            QtWidgets.QMessageBox.No)
-        if message == QtWidgets.QMessageBox.Yes:
+        message = dialogs.connect(self)
+        if message == QtYes:
             ip_u = str(self.ip.text())
             login_u = self.login.text()
             port_u = int(self.port.text())
             password_u = self.password.text()
             if self.remember.isChecked():
-                login_func.write_config(
+                write_config(
                     'login.ini', login=login_u,
                     password=password_u, ip=ip_u, port=port_u)
             try:
-                self.ssh_connection = login_func.auth(
-                    login_u, password_u, ip_u, port_u)
-                self.sftp_connection = login_func.sftp(
-                    login_u, password_u, ip_u, port_u)
+                self.ovpn = OpenVPN(login_u, password_u, ip_u)
             except Exception as e:
                 QtWidgets.QMessageBox.information(self, 'Error', f"{e}")
             else:
@@ -64,33 +64,25 @@ class LoginWindow(QtWidgets.QMainWindow, design.Ui_ConnectWindow):
                     self, 'Connection',
                     f"Welcome {login_u}.\nYour IP: {ip_u}:{port_u}")
                 try:
-                    self.sftp_connection.stat('/etc/openvpn/server.conf')
+                    self.ovpn.sftp_client.stat('/etc/openvpn/server.conf')
                 except Exception:
-                    first = QtWidgets.QMessageBox.question(
-                        self, 'No OVPN installed',
-                        'Start installation manager?',
-                        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                        QtWidgets.QMessageBox.Yes)
-                    if first == QtWidgets.QMessageBox.Yes:
-                        self.ssh_connection.exec_command(
+                    first = dialogs.no_openvpn(self)
+                    if first == QtYes:
+                        self.ovpn.ssh_client.exec_command(
                             'apt install -y net-tools openvpn')
                         while not install:
                             try:
-                                self.sftp_connection.stat('/etc/openvpn')
+                                self.ovpn.sftp_client.stat('/etc/openvpn')
                                 install = True
                             except Exception:
                                 pass
                             else:
                                 print('[DEBUG] net-tools and openvpn installed!')
-                        self.setup = SetupDialog(
-                            ssh=self.ssh_connection,
-                            sftp=self.sftp_connection)
+                        self.setup = SetupDialog(self.ovpn)
                         self.setup.show()
                         self.close()
                 else:
-                    self.mainwin = MainWindow(
-                        ssh=self.ssh_connection,
-                        sftp=self.sftp_connection)
+                    self.mainwin = MainWindow(self.ovpn)
                     self.mainwin.show()
                     self.close()
         else:
@@ -98,13 +90,14 @@ class LoginWindow(QtWidgets.QMainWindow, design.Ui_ConnectWindow):
 
 
 class EditDialog(QtWidgets.QDialog, design.Ui_Edit_Dialog):
-    def __init__(self, ssh, sftp, parent=None):
+    def __init__(self, ovpn, parent=None):
         super(EditDialog, self).__init__(parent)
         self.setupUi(self)
         self.center()
-        self.stream = ssh
-        self.sftp_stream = sftp
-        self.get_ip = parsers.get_ip(self.stream)
+        self.ovpn = ovpn
+        self.ssh = self.ovpn.ssh_client
+        self.sftp = self.ovpn.sftp_client
+        self.get_ip = self.ovpn.get_ip()
         self.ipEdit.setText(self.get_ip[0])
         self.finishButton.clicked.connect(self.editing)
 
@@ -154,37 +147,38 @@ class EditDialog(QtWidgets.QDialog, design.Ui_Edit_Dialog):
         for line in config:
             conf.write(line + '\n')
         conf.close()
-        self.stream.exec_command('iptables -t nat -F; iptables -F')
-        self.stream.exec_command('iptables -A FORWARD -i tun0 -j ACCEPT')
-        self.stream.exec_command(
+        self.ssh.exec_command('iptables -t nat -F; iptables -F')
+        self.ssh.exec_command('iptables -A FORWARD -i tun0 -j ACCEPT')
+        self.ssh.exec_command(
             f'iptables -A FORWARD -i tun0 -o {self.get_ip[1]} -m state --state RELATED,ESTABLISHED -j ACCEPT')
-        self.stream.exec_command(
+        self.ssh.exec_command(
             f'iptables -A FORWARD -i {self.get_ip[1]} -o tun0 -m state --state RELATED,ESTABLISHED -j ACCEPT')
-        self.stream.exec_command(
+        self.ssh.exec_command(
             f'iptables -t nat -A POSTROUTING -s {self.netipEdit.text()} -o {self.get_ip[1]} -j SNAT --to-source {self.get_ip[0]}')
-        self.stream.exec_command(
+        self.ssh.exec_command(
             'export DEBIAN_FRONTEND=noninteractive; apt-get -yq install iptables-persistent')
         sleep(2)
-        self.stream.exec_command('iptables-save > /etc/iptables.conf')
-        self.stream.exec_command('iptables-save > /etc/iptables/rules.v4')
-        self.stream.exec_command(
+        self.ssh.exec_command('iptables-save > /etc/iptables.conf')
+        self.ssh.exec_command('iptables-save > /etc/iptables/rules.v4')
+        self.ssh.exec_command(
             'echo "iptables-restore < /etc/iptables.conf" >> /etc/rc.local')
-        self.sftp_stream.put('./server.conf', '/etc/openvpn/server.conf')
+        self.sftp.put('./server.conf', '/etc/openvpn/server.conf')
         os.remove('./server.conf')
         QtWidgets.QMessageBox.information(
             self, 'Succeed', 'Successfully copied configs!')
 
 
 class SetupDialog(QtWidgets.QDialog, design.Ui_Setup_Dialog):
-    def __init__(self, ssh, sftp, parent=None):
+    def __init__(self, ovpn, parent=None):
         super(SetupDialog, self).__init__(parent)
         self.setupUi(self)
         self.center()
-        self.stream = ssh
-        self.sftp_stream = sftp
-        self.get_ip = parsers.get_ip(self.stream)
+        self.ovpn = ovpn
+        self.get_ip = self.ovpn.get_ip()
         self.ipEdit.setText(self.get_ip[0])
         self.finishButton.clicked.connect(self.servconf)
+        self.ssh = ovpn.ssh_client
+        self.sftp = ovpn.sftp_client
 
     def center(self):
         qr = self.frameGeometry()
@@ -194,8 +188,8 @@ class SetupDialog(QtWidgets.QDialog, design.Ui_Setup_Dialog):
 
     def servconf(self):
         created, ready, generated = False, False, False
-        value1 = parsers.cidr_to_netmask(self.netipEdit.text())[0]
-        value2 = parsers.cidr_to_netmask(self.netipEdit.text())[1]
+        value1 = cidr_to_netmask(self.netipEdit.text())[0]
+        value2 = cidr_to_netmask(self.netipEdit.text())[1]
         merge, build_keys, cp_crt = '', '', ''
         commands = (
             'mkdir /etc/openvpn/easy-rsa/; ',
@@ -223,10 +217,10 @@ class SetupDialog(QtWidgets.QDialog, design.Ui_Setup_Dialog):
             pass
         for cm in commands:
             merge += cm
-        self.stream.exec_command(merge)
+        self.ssh.exec_command(merge)
         while not created:
             try:
-                self.sftp_stream.get('/etc/openvpn/easy-rsa/vars', './vars')
+                self.sftp.get('/etc/openvpn/easy-rsa/vars', './vars')
                 created = True
             except FileNotFoundError:
                 pass
@@ -268,7 +262,7 @@ class SetupDialog(QtWidgets.QDialog, design.Ui_Setup_Dialog):
         for line in config:
             conf.write(line + '\n')
         conf.close()
-        self.sftp_stream.put('./server.conf', '/etc/openvpn/server.conf')
+        self.sftp.put('./server.conf', '/etc/openvpn/server.conf')
 
         with io.open('./vars', newline='\n') as fin, NamedTemporaryFile(dir='.', delete=False) as fout:
             for line in fin:
@@ -286,13 +280,13 @@ class SetupDialog(QtWidgets.QDialog, design.Ui_Setup_Dialog):
         fin.close()
         os.remove('./vars')
         os.rename(fout.name, 'vars')
-        self.sftp_stream.put('./vars', '/etc/openvpn/easy-rsa/vars')
+        self.sftp.put('./vars', '/etc/openvpn/easy-rsa/vars')
         for cmd in vars_commands:
             build_keys += cmd
-        self.stream.exec_command(build_keys)
+        self.ssh.exec_command(build_keys)
         while not generated:
             try:
-                self.sftp_stream.stat('/etc/openvpn/easy-rsa/keys/server.key')
+                self.sftp.stat('/etc/openvpn/easy-rsa/keys/server.key')
                 generated = True
             except Exception:
                 pass
@@ -301,28 +295,28 @@ class SetupDialog(QtWidgets.QDialog, design.Ui_Setup_Dialog):
                 sleep(1)
                 for c_s in copy_certs:
                     cp_crt += c_s
-                self.stream.exec_command(cp_crt)
+                self.ssh.exec_command(cp_crt)
         while not ready:
             try:
-                self.sftp_stream.stat('/etc/openvpn/dh2048.pem')
+                self.sftp.stat('/etc/openvpn/dh2048.pem')
                 ready = True
             except Exception:
                 pass
             else:
                 print('[DEBUG] Certs successfully copied to ovpn dir!')
-        self.stream.exec_command('iptables -A FORWARD -i tun0 -j ACCEPT')
-        self.stream.exec_command(
+        self.ssh.exec_command('iptables -A FORWARD -i tun0 -j ACCEPT')
+        self.ssh.exec_command(
             f'iptables -A FORWARD -i tun0 -o {self.get_ip[1]} -m state --state RELATED,ESTABLISHED -j ACCEPT')
-        self.stream.exec_command(
+        self.ssh.exec_command(
             f'iptables -A FORWARD -i {self.get_ip[1]} -o tun0 -m state --state RELATED,ESTABLISHED -j ACCEPT')
-        self.stream.exec_command(
+        self.ssh.exec_command(
             f'iptables -t nat -A POSTROUTING -s {self.netipEdit.text()} -o {self.get_ip[1]} -j SNAT --to-source {self.get_ip[0]}')
-        self.stream.exec_command(
+        self.ssh.exec_command(
             'export DEBIAN_FRONTEND=noninteractive; apt-get -yq install iptables-persistent')
         sleep(2)
-        self.stream.exec_command('iptables-save > /etc/iptables.conf')
-        self.stream.exec_command('iptables-save > /etc/iptables/rules.v4')
-        self.stream.exec_command(
+        self.ssh.exec_command('iptables-save > /etc/iptables.conf')
+        self.ssh.exec_command('iptables-save > /etc/iptables/rules.v4')
+        self.ssh.exec_command(
             'echo "iptables-restore < /etc/iptables.conf" >> /etc/rc.local')
         try:
             os.remove('./vars')
@@ -333,22 +327,23 @@ class SetupDialog(QtWidgets.QDialog, design.Ui_Setup_Dialog):
         QtWidgets.QMessageBox.information(
             self, 'Succeed',
             'Successfully installed! Server gonna be restarted!')
-        self.stream.exec_command('service openvpn restart')
-        self.stream.exec_command('reboot')
+        self.ssh.exec_command('service openvpn restart')
+        self.ssh.exec_command('reboot')
         self.close()
 
 
 class MainWindow(QtWidgets.QMainWindow, design.Ui_MainWindow):
-    def __init__(self, ssh, sftp, parent=None):
+    def __init__(self, ovpn, parent=None):
         super(MainWindow, self).__init__(parent)
         self.setupUi(self)
         self.center()
-        self.stream = ssh
-        self.sftp = sftp
+        self.ovpn = ovpn
+        self.ssh = self.ovpn.ssh_client
+        self.sftp = self.ovpn.sftp_client
         self.recieve_vars()
         self.ovpn_version()
         self.connLabel.setText(
-            str(self.stream.get_transport().sock.getpeername()[0]))
+            str(self.ssh.get_transport().sock.getpeername()[0]))
         self.verLabel.setText(self.ovpn_version())
         self.usersLabel.setText(self.list_users())
         self.importButton_2.clicked.connect(self.editconf)
@@ -365,7 +360,7 @@ class MainWindow(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 users.append(item.text())
         try:
             for user in users:
-                self.stream.exec_command(
+                self.ssh.exec_command(
                     f'cd /etc/openvpn/easy-rsa; source ./vars; ./revoke-full {user}')
         except Exception as exc:
             QtWidgets.QMessageBox.information(self, 'Error', f'{exc}!')
@@ -373,12 +368,12 @@ class MainWindow(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.usersLabel.setText(self.list_users())
 
     def editconf(self):
-        self.editcnf = EditDialog(ssh=self.stream, sftp=self.sftp)
+        self.editcnf = EditDialog(self.ovpn)
         self.editcnf.show()
 
     def ovpn_version(self):
         version = ''
-        stdin, stdout, stderr = self.stream.exec_command('openvpn --version')
+        stdin, stdout, stderr = self.ssh.exec_command('openvpn --version')
         for line in stdout:
             version = line.split()[1]
             break
@@ -389,15 +384,14 @@ class MainWindow(QtWidgets.QMainWindow, design.Ui_MainWindow):
         listItems = self.serverList.selectedItems()
         for item in listItems:
             self.serverList.takeItem(self.serverList.row(item))
-        users = parsers.add_users(self.stream)
+        users = self.ovpn.add_users()
         for user in users:
             if user != 'server':
                 self.serverList.addItem(user)
         return str(len(users))
 
     def importFile(self):
-        fname = QtWidgets.QFileDialog.getOpenFileName(
-            self, 'Open file', '.', options=QtWidgets.QFileDialog.Options())[0]
+        fname = dialogs.open_file(self)
         if fname != '':
             self.importList.selectAll()
             listItems = self.importList.selectedItems()
@@ -414,13 +408,10 @@ class MainWindow(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.move(qr.topLeft())
 
     def closeEvent(self, event):
-        reply = QtWidgets.QMessageBox.question(
-            self, 'Message', "Are you sure to quit?",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-            QtWidgets.QMessageBox.No)
-        if reply == QtWidgets.QMessageBox.Yes:
+        reply = dialogs.close_me(self)
+        if reply == QtYes:
             event.accept()
-            self.stream.close()
+            self.ovpn.close()
         else:
             event.ignore()
 
@@ -433,7 +424,7 @@ class MainWindow(QtWidgets.QMainWindow, design.Ui_MainWindow):
             if item.text() != 'server':
                 users.append(item.text())
         try:
-            parsers.download_profiles(self.stream, self.sftp, users)
+            self.ovpn.download_profiles(users)
         except Exception as exc:
             QtWidgets.QMessageBox.information(self, 'Error', f'{exc}!')
         QtWidgets.QMessageBox.information(
@@ -454,9 +445,9 @@ class MainWindow(QtWidgets.QMainWindow, design.Ui_MainWindow):
                     self, 'Downloading',
                     "There's more than 1 user.\
                     \nSubfolder 'profiles' will be created!")
-                parsers.download_profiles(self.stream, self.sftp, users)
+                self.ovpn.download_profiles(users)
             else:
-                parsers.download_profiles(self.stream, self.sftp, users, False)
+                self.ovpn.download_profiles(users, False)
         except Exception as exc:
             QtWidgets.QMessageBox.information(self, 'Error', f'{exc}!')
         QtWidgets.QMessageBox.information(
@@ -468,11 +459,11 @@ class MainWindow(QtWidgets.QMainWindow, design.Ui_MainWindow):
         while not down:
             try:
                 sleep(2)
-                iface = parsers.get_tun0(self.stream)
+                iface = self.ovpn.get_tun0()
                 self.tunLabel.setText(f'{iface[0]} ({iface[1]})')
                 down = True
             except Exception:
-                self.stream.exec_command('service openvpn restart')
+                self.ssh.exec_command('service openvpn restart')
 
 
 def main():
