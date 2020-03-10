@@ -1,8 +1,6 @@
-# OpenVPN Assitant
+# OpenVPN Assitant (not working)
 
-My project for passing exams (maybe will improve in future)
-
-Currently in dev
+Not working after code reorganizations
 
 Tested on Debian 8/9
 
