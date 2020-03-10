@@ -2,6 +2,8 @@
 
 Not working after code reorganizations
 
+Old working version [here](https://github.com/INZAME/openvpn-assistant/releases).
+
 Tested on Debian 8/9
 
 ## Getting Started
