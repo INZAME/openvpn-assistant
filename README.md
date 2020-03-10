@@ -1,6 +1,4 @@
-# OpenVPN Assitant (not working)
-
-Not working after code reorganizations
+# OpenVPN Assitant
 
 Old working version [here](https://github.com/INZAME/openvpn-assistant/releases).
 
