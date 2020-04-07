@@ -28,6 +28,15 @@ Just run main.py and folow screen instructions
 4. Edit your existing server configuration
 ```
 
+### Screenshots
+![](https://sun2-4.userapi.com/BwdtUVvHLp8plcqKYf8yC5u08hd2qpgwELLxYg/aLirlX5xZyA.jpg)
+>Logging screen
+![](https://sun2-4.userapi.com/NT4H6PtYQT7rcvwOQRRY0QDVIiX2WeFwsqSqvQ/RnjhhJRRkM8.jpg)
+>Main window
+![](https://sun2-4.userapi.com/_eXnQH5FUnfje9v0BOnuelgSj8Ae7FjnRQnSCw/HarKBfTSH8I.jpg)
+>Config editor
+
+
 ### Known issues
 
 * Using *no logging* option while installing will not allow to start OpenVPN (can be activated later by hand)
