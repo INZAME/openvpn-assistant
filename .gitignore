@@ -19,6 +19,7 @@ lib/
 lib64/
 parts/
 sdist/
+test/
 var/
 wheels/
 pip-wheel-metadata/
@@ -103,3 +104,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Testing stuff
+test.py
+server.conf
+login.ini
+tmp.conf

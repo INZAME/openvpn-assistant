@@ -43,7 +43,7 @@ class LoginWindow(QtWidgets.QMainWindow, design.Ui_ConnectWindow):
     def connection(self):
         install = False
         message = dialogs.connect(self)
-        if message == Message.Yes :
+        if message == QtWidgets.QMessageBox.Yes:
             ip_u = str(self.ip.text())
             login_u = self.login.text()
             port_u = int(self.port.text())
@@ -108,8 +108,8 @@ class EditDialog(QtWidgets.QDialog, design.Ui_Edit_Dialog):
 
     def editing(self):
         config = []
-        value1 = parsers.cidr_to_netmask(self.netipEdit.text())[0]
-        value2 = parsers.cidr_to_netmask(self.netipEdit.text())[1]
+        value1 = cidr_to_netmask(self.netipEdit.text())[0]
+        value2 = cidr_to_netmask(self.netipEdit.text())[1]
         config.append(f'local {self.ipEdit.text()}')
         config.append(f'port {self.portEdit.text()}')
         config.append(f'proto {self.protoBox.currentText()}')
@@ -225,42 +225,17 @@ class SetupDialog(QtWidgets.QDialog, design.Ui_Setup_Dialog):
                 pass
             else:
                 print('[DEBUG] vars copied to local desktop')
-        config = []
-        config.append(f'local {self.ipEdit.text()}')
-        config.append(f'port {self.portEdit.text()}')
-        config.append(f'proto {self.protoBox.currentText()}')
-        config.extend(('dev tun', 'ca ca.crt',
-                       'cert server.crt', 'key server.key',
-                       ';crl-verify /etc/openvpn/easy-rsa/keys/crl.pem',
-                       'dh dh2048.pem'))
-        config.append(
-            f'server {value1} {value2}')
-        config.append('ifconfig-pool-persist ipp.txt')
-        config.append('push "redirect-gateway def1"')
-        if str(self.dnsBox.currentText()) == 'OpenNIC':
-            config.append('dhcp-option DNS 91.217.137.37')
-            config.append('dhcp-option DNS 172.104.136.243')
-        elif str(self.dnsBox.currentText()) == 'Google':
-            config.append('dhcp-option DNS 8.8.8.8')
-            config.append('dhcp-option DNS 8.8.4.4')
-        elif str(self.dnsBox.currentText()) == 'Yandex':
-            config.append('dhcp-option DNS 77.88.8.8')
-            config.append('dhcp-option DNS 77.88.8.1')
-        config.extend(('keepalive 10 120', 'tls-server',
-                       'auth SHA512', 'cipher AES-256-CBC',
-                       'user nobody', 'group nogroup',
-                       'persist-key', 'persist-tun'))
-        if self.clientsBox.isChecked():
-            config.append('client-to-client')
-        if self.loggingBox.isChecked():
-            config.extend(('status /dev/null', 'log /dev/null'))
-        else:
-            config.extend(('status openvpn-status.log',
-                           'log openvpn.log', 'verb 3'))
-        conf = io.open('./server.conf', 'w', newline='\n')
-        for line in config:
-            conf.write(line + '\n')
-        conf.close()
+
+        server_config(local=self.ipEdit.text(),
+                      port=self.portEdit.text(),
+                      proto=self.protoBox.currentText(),
+                      server_ip=value1,
+                      server_port=value2,
+                      dns=str(self.dnsBox.currentText()),
+                      c2c=self.clientsBox.isChecked(),
+                      logging=self.loggingBox.isChecked()
+                      )
+
         self.sftp.put('./server.conf', '/etc/openvpn/server.conf')
 
         with io.open('./vars', newline='\n') as fin, NamedTemporaryFile(dir='.', delete=False) as fout:
@@ -337,13 +312,12 @@ class MainWindow(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.setupUi(self)
         self.center()
         self.ovpn = ovpn
-        self.ssh = self.ovpn.ssh_client
-        self.sftp = self.ovpn.sftp_client
+        self.ssh = ovpn.ssh_client
+        self.sftp = ovpn.sftp_client
         self.recieve_vars()
-        self.ovpn_version()
         self.connLabel.setText(
             str(self.ssh.get_transport().sock.getpeername()[0]))
-        self.verLabel.setText(self.ovpn_version())
+        self.verLabel.setText(self.ovpn.ovpn_version())
         self.usersLabel.setText(self.list_users())
         self.importButton_2.clicked.connect(self.editconf)
         self.dwnservButton.clicked.connect(self.dwn_selected)
@@ -369,14 +343,6 @@ class MainWindow(QtWidgets.QMainWindow, design.Ui_MainWindow):
     def editconf(self):
         self.editcnf = EditDialog(self.ovpn)
         self.editcnf.show()
-
-    def ovpn_version(self):
-        version = ''
-        stdin, stdout, stderr = self.ssh.exec_command('openvpn --version')
-        for line in stdout:
-            version = line.split()[1]
-            break
-        return version
 
     def list_users(self):
         self.serverList.selectAll()

@@ -18,9 +18,9 @@ from shutil import rmtree
 class OpenVPN:
 
     def __init__(self, login, password, ip, port=22):
-        '''
+        """
         ssh_client, sftp_client
-        '''
+        """
         self.ssh_client = paramiko.SSHClient()
         self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.ssh_client.connect(ip, port, login, password)
@@ -29,11 +29,11 @@ class OpenVPN:
         self.sftp_client = paramiko.SFTPClient.from_transport(self.sftp_transport)
 
     def add_users(self, state='reg') -> list:
-        '''
+        """
         Read users from server and return list
         reg state: return registered users
         rev state: return revoked users
-        '''
+        """
         command = 'cat /etc/openvpn/easy-rsa/keys/index.txt'
         stdin, stdout, stderr = self.ssh_client.exec_command(command)
         if str(state) == 'reg':
@@ -52,9 +52,9 @@ class OpenVPN:
             return usr_rev
 
     def show_conf(self) -> list:
-        '''
+        """
         Parse OpenVPN config to list
-        '''
+        """
         config = []
         stdin, stdout, stderr = self.ssh_client.exec_command('cat /etc/openvpn/server.conf')
         for line in stdout:
@@ -62,10 +62,21 @@ class OpenVPN:
                 config.append(line)
         return config
 
+    def ovpn_version(self) -> str:
+        """
+        Return OpenVPN version
+        """
+        version = ''
+        stdin, stdout, stderr = self.ssh_client.exec_command('openvpn --version')
+        for line in stdout:
+            version = line.split()[1]
+            break
+        return version
+
     def download_profiles(self, user_list, subfolder=True):
-        '''
+        """
         Download profiles from user list
-        '''
+        """
         usr_reg = []
         con_ip = str(self.ssh_client.get_transport().sock.getpeername()[0])
         self.sftp_client.get('/etc/openvpn/server.conf', './tmp.conf')
@@ -77,7 +88,7 @@ class OpenVPN:
                 port = line.split()[1]
             elif re.match(r'proto', line):
                 proto = line.split()[1]
-        stdin, stdout, stderr = ssh.exec_command(index)
+        stdin, stdout, stderr = self.ssh_client.exec_command(index)
         for line in stdout:
             new_line = line.split('/')
             if line[0] == 'V':
@@ -103,7 +114,7 @@ class OpenVPN:
                 settings.append('explicit-exit-notify')
             if new_user not in usr_reg:
                 end = f'; source ./vars; ./build-key --batch {new_user}'
-                ssh.exec_command('cd ' + keys_folder[:-5] + end)
+                self.ssh_client.exec_command('cd ' + keys_folder[:-5] + end)
                 time.sleep(1)
             path = f'./profiles/{new_user}' if subfolder else f'./{new_user}'
             if os.path.exists(path):
@@ -120,9 +131,9 @@ class OpenVPN:
         os.remove('./tmp.conf')
 
     def get_tun0(self):
-        '''
+        """
         Get tunnel IP
-        '''
+        """
         ip = []
         ifaces = ('tun0', 'tun1', 'tun2')
         end = " | grep 'inet' | cut -d: -f2 | awk '{print $2}'"
@@ -137,9 +148,9 @@ class OpenVPN:
         return ip
 
     def get_ip(self):
-        '''
+        """
         Get remote VM's local IP
-        '''
+        """
         ip = []
         ifaces = ('eth0', 'eth1', 'ens3', 'en3s0',
                 'ens33', 'en0s3', 'enp0s3', 'enp3s0')
@@ -154,8 +165,8 @@ class OpenVPN:
         return ip
     
     def close(self):
-        '''
+        """
         Close connections
-        '''
+        """
         self.sftp_client.close()
         self.ssh_client.close()
