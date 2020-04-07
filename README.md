@@ -30,10 +30,15 @@ Just run main.py and folow screen instructions
 
 ### Screenshots
 ![](https://sun2-4.userapi.com/BwdtUVvHLp8plcqKYf8yC5u08hd2qpgwELLxYg/aLirlX5xZyA.jpg)
+
 >Logging screen
+
 ![](https://sun2-4.userapi.com/NT4H6PtYQT7rcvwOQRRY0QDVIiX2WeFwsqSqvQ/RnjhhJRRkM8.jpg)
+
 >Main window
+
 ![](https://sun2-4.userapi.com/_eXnQH5FUnfje9v0BOnuelgSj8Ae7FjnRQnSCw/HarKBfTSH8I.jpg)
+
 >Config editor
 
 
