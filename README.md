@@ -31,7 +31,7 @@ Just run main.py and folow screen instructions
 ### Screenshots
 ![](https://sun2-4.userapi.com/BwdtUVvHLp8plcqKYf8yC5u08hd2qpgwELLxYg/aLirlX5xZyA.jpg)
 
-> Logging screen
+> Login screen
 
 ![](https://sun2-4.userapi.com/NT4H6PtYQT7rcvwOQRRY0QDVIiX2WeFwsqSqvQ/RnjhhJRRkM8.jpg)
 
