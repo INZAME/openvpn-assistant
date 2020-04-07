@@ -107,45 +107,17 @@ class EditDialog(QtWidgets.QDialog, design.Ui_Edit_Dialog):
         self.move(qr.topLeft())
 
     def editing(self):
-        config = []
         value1 = cidr_to_netmask(self.netipEdit.text())[0]
         value2 = cidr_to_netmask(self.netipEdit.text())[1]
-        config.append(f'local {self.ipEdit.text()}')
-        config.append(f'port {self.portEdit.text()}')
-        config.append(f'proto {self.protoBox.currentText()}')
-        config.extend(('dev tun',
-                       'ca ca.crt',
-                       'cert server.crt',
-                       'key server.key',
-                       ';crl-verify /etc/openvpn/easy-rsa/keys/crl.pem',
-                       'dh dh2048.pem'))
-        config.append(f'server {value1} {value2}')
-        config.append('ifconfig-pool-persist ipp.txt')
-        config.append('push "redirect-gateway def1"')
-        if str(self.dnsBox.currentText()) == 'OpenNIC':
-            config.append('dhcp-option DNS 91.217.137.37')
-            config.append('dhcp-option DNS 172.104.136.243')
-        elif str(self.dnsBox.currentText()) == 'Google':
-            config.append('dhcp-option DNS 8.8.8.8')
-            config.append('dhcp-option DNS 8.8.4.4')
-        elif str(self.dnsBox.currentText()) == 'Yandex':
-            config.append('dhcp-option DNS 77.88.8.8')
-            config.append('dhcp-option DNS 77.88.8.1')
-        config.extend(('keepalive 10 120', 'tls-server',
-                       'auth SHA512', 'cipher AES-256-CBC',
-                       'user nobody', 'group nogroup',
-                       'persist-key', 'persist-tun'))
-        if self.clientsBox.isChecked():
-            config.append('client-to-client')
-        if self.loggingBox.isChecked():
-            config.extend(('status /dev/null', 'log /dev/null'))
-        else:
-            config.extend(('status openvpn-status.log',
-                           'log openvpn.log', 'verb 3'))
-        conf = io.open('./server.conf', 'w', newline='\n')
-        for line in config:
-            conf.write(line + '\n')
-        conf.close()
+        server_config(local=self.ipEdit.text(),
+                      port=self.portEdit.text(),
+                      proto=self.protoBox.currentText(),
+                      server_ip=value1,
+                      server_port=value2,
+                      dns=str(self.dnsBox.currentText()),
+                      c2c=self.clientsBox.isChecked(),
+                      logging=self.loggingBox.isChecked()
+                      )
         self.ssh.exec_command('iptables -t nat -F; iptables -F')
         self.ssh.exec_command('iptables -A FORWARD -i tun0 -j ACCEPT')
         self.ssh.exec_command(
